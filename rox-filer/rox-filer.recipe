@@ -1,0 +1,107 @@
+#
+# git2package sets the following environment variables.
+#
+# RECIPE_DIR is the path of the root of the recipe repo.
+# SOURCE_DIR is the path of the git repo with the package source code.
+# OUTPUT_DIR is the path to where finished packages should be saved.
+#
+
+. ${RECIPE_DIR}/support.sh
+
+ARCH=$(uname -m)
+DESC="Light weight gtk file manager"
+DEPS=+gtk+2
+CAT=Filesystem
+
+ROX_DIR=$(cd "${SOURCE_DIR}/ROX-Filer" ; pwd)
+export ROX_DIR
+
+VER=$(sed -n 's/^.*<Version>\(.*\)<\/Version>.*$/\1/p' ${ROX_DIR}/AppInfo.xml)
+BUILD=$(cd "${ROX_DIR}"; git log -n 1 --pretty=format:"%h")
+
+if [ -e "rox-filer-${VER}-${ARCH}_${BUILD}" ]; then
+  echo "Error: ${PWD}/rox-filer-${VER}-${ARCH}_${BUILD} already exists."
+  exit 1
+fi
+
+if [ -e "rox-filer_NLS-${VER}-${ARCH}_${BUILD}" ]; then
+  echo "Error: ${PWD}rox-filer_NLS-${VER}-${ARCH}_${BUILD} already exists."
+  exit 1
+fi
+
+if [ "x${MAKE}" = x ]; then
+  MAKE=make export MAKE
+fi
+
+echo
+echo "Compiling ${ROX_DIR}... please wait..." >&2
+echo
+
+if [ ! -x "${ROX_DIR}/src/configure" ]; then
+  echo "No 'configure' script! Trying to run autoconf..."
+  (cd "${ROX_DIR}/src"; autoconf)
+fi
+
+BUILDDIR="./build"
+
+[ ! -d "${BUILDDIR}" ] && mkdir "${BUILDDIR}"
+rm -f "${BUILDDIR}/config.cache"
+rm -f "${ROX_DIR}/src/config.h"    # (for upgrading)
+rm -f "${ROX_DIR}/ROX-Filer"
+cd "${BUILDDIR}" && \
+  "${ROX_DIR}/src/configure" "$@" && \
+  ${MAKE} clean && ${MAKE} && echo Done >&2
+
+cd ..
+
+EXEC=$(find ${ROX_DIR} -type f -name 'ROX-Filer')
+if [ "${EXEC}" ]; then
+  mkdir -p rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+
+  cp -arf ${ROX_DIR}/Help rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -arf ${ROX_DIR}/images  rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -arf ${ROX_DIR}/ROX  rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+
+#  cp -af ${ROX_DIR}/AppInfo.xml rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  sed "s/${VER}/${VER}_${BUILD}/" ${ROX_DIR}/AppInfo.xml > rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/AppInfo.xml
+
+  cp -af ${ROX_DIR}/AppRun rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/.DirIcon rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/Options.xml rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/style.css rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/subclasses rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/Templates.glade rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/Templates.ui rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+
+  cp -af ${EXEC} rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  chmod 755 rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/ROX-Filer
+  strip --strip-unneeded rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/ROX-Filer
+
+  (cd "${ROX_DIR}/src/po/"
+    ./make-mo de
+    ./make-mo fr
+  )
+
+  mkdir -p rox-filer_NLS-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  cp -af ${ROX_DIR}/Messages/README rox-filer_NLS-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  mv -f  ${ROX_DIR}/Messages/de rox-filer_NLS-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  mv -f  ${ROX_DIR}/Messages/fr rox-filer_NLS-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+
+else
+  exit 1
+fi
+
+install -d -m 0755 rox-filer-${VER}-${ARCH}_${BUILD}/usr/share/applications
+echo "[Desktop Entry]
+Encoding=UTF-8
+Name=ROX-Filer file manager
+Icon=/usr/share/pixmaps/puppy/open.svg
+Comment=ROX-Filer file manager
+Exec=rox
+Terminal=false
+Type=Application
+Categories=FileManager
+GenericName=ROX-Filer file manager" > rox-filer-${VER}-${ARCH}_${BUILD}/usr/share/applications/ROX-Filer-file-manager.desktop
+
+package rox-filer-${VER}-${ARCH}_${BUILD} rox-filer-${VER} rox-filer "${DESC}" "${DEPS}"
+package rox-filer_NLS-${VER}-${ARCH}_${BUILD} rox-filer_NLS-${VER} rox-filer_NLS "rox-filer locales" "+rox-filer"
