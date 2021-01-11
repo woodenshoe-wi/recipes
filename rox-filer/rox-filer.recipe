@@ -8,6 +8,9 @@
 
 . ${RECIPE_DIR}/support.sh
 
+# use '--enable-desktop' if available; 'yes', 'no' or 'ask'
+DESKTOP=ask
+
 ARCH=$(uname -m)
 DESC="Light weight gtk file manager"
 DEPS=+gtk+2
@@ -37,10 +40,8 @@ echo
 echo "Compiling ${ROX_DIR}... please wait..." >&2
 echo
 
-if [ ! -x "${ROX_DIR}/src/configure" ]; then
-  echo "No 'configure' script! Trying to run autoconf..."
-  (cd "${ROX_DIR}/src"; autoconf)
-fi
+echo "Trying to run autoconf..."
+(cd "${ROX_DIR}/src"; autoconf)
 
 BUILDDIR="./build"
 
@@ -48,8 +49,22 @@ BUILDDIR="./build"
 rm -f "${BUILDDIR}/config.cache"
 rm -f "${ROX_DIR}/src/config.h"    # (for upgrading)
 rm -f "${ROX_DIR}/ROX-Filer"
-cd "${BUILDDIR}" && \
-  "${ROX_DIR}/src/configure" "$@" && \
+cd "${BUILDDIR}"
+  DESKTOP_AVAILABLE=$(${ROX_DIR}/src/configure --help | grep enable-desktop)
+  ENABLE_DESKTOP=''
+  if [ "${DESKTOP_AVAILABLE}" != '' ]; then
+    if [ "${DESKTOP}" = 'ask' ]; then
+      echo
+      read -n1 -p "Do you want to enable Desktop directory support? (y/N)" var
+      echo
+      case ${var} in
+        y|Y) ENABLE_DESKTOP='--enable-desktop'
+      esac
+    elif [ "${DESKTOP}" = 'yes' ]; then
+      ENABLE_DESKTOP='--enable-desktop'
+    fi
+  fi
+  "${ROX_DIR}/src/configure" "${ENABLE_DESKTOP}" "$@" && \
   ${MAKE} clean && ${MAKE} && echo Done >&2
 
 cd ..
@@ -67,11 +82,18 @@ if [ "${EXEC}" ]; then
 
   cp -af ${ROX_DIR}/AppRun rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   cp -af ${ROX_DIR}/.DirIcon rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
-  cp -af ${ROX_DIR}/Options.xml rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   cp -af ${ROX_DIR}/style.css rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   cp -af ${ROX_DIR}/subclasses rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   cp -af ${ROX_DIR}/Templates.glade rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   cp -af ${ROX_DIR}/Templates.ui rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+
+  if [ "${DESKTOP_AVAILABLE}" != '' ]; then
+    # Options.xml is generated from Options.xml.in
+    mv -f ${ROX_DIR}/Options.xml rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  else
+    # Options.xml is not a generated file and is part of the source code
+    cp -af ${ROX_DIR}/Options.xml rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
+  fi
 
   cp -af ${EXEC} rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/
   chmod 755 rox-filer-${VER}-${ARCH}_${BUILD}/usr/local/apps/ROX-Filer/ROX-Filer
